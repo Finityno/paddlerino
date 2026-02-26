@@ -9,27 +9,18 @@ import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardPanel } from "@/components/ui/card";
 import {
-  Card,
-  CardFooter,
-  CardHeader,
-  CardPanel,
-  CardTitle,
-} from "@/components/ui/card";
-import {
-  Dialog,
-  DialogClose,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogPopup,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Separator } from "@/components/ui/separator";
+  Frame,
+  FrameDescription,
+  FrameFooter,
+  FrameHeader,
+  FrameTitle,
+} from "@/components/ui/frame";
+import { Group, GroupSeparator } from "@/components/ui/group";
+import { Input } from "@/components/ui/input";
 
 import { optimisticallySetScore } from "./optimistic-score";
-import ScoreButton from "./score-button";
 
 interface Player {
   _id: Id<"players">;
@@ -50,7 +41,6 @@ interface ActiveSessionData {
 }
 
 interface ActiveSessionProps {
-  matchId: Id<"matches">;
   session: ActiveSessionData | null | undefined;
   players: Player[];
 }
@@ -59,7 +49,6 @@ export default function ActiveSession({
   session,
   players,
 }: ActiveSessionProps) {
-  const endSession = useMutation(api.sessions.end);
   const setScore = useMutation(api.sessions.setScore).withOptimisticUpdate(
     (localStore, args) => {
       optimisticallySetScore(localStore, args);
@@ -75,13 +64,24 @@ export default function ActiveSession({
 
   if (session === null) {
     return (
-      <Card>
-        <CardPanel>
-          <p className="text-center text-sm text-muted-foreground py-4">
-            No active session. Start a new one below.
+      <Frame>
+        <FrameHeader>
+          <FrameTitle>Session</FrameTitle>
+          <FrameDescription>No active session right now.</FrameDescription>
+        </FrameHeader>
+        <Card>
+          <CardPanel>
+            <p className="text-center text-sm text-muted-foreground py-4">
+              No active session. Start a new one below.
+            </p>
+          </CardPanel>
+        </Card>
+        <FrameFooter>
+          <p className="text-xs text-muted-foreground">
+            Start a new session to begin live scoring.
           </p>
-        </CardPanel>
-      </Card>
+        </FrameFooter>
+      </Frame>
     );
   }
 
@@ -91,10 +91,6 @@ export default function ActiveSession({
     (highest, playerScore) => Math.max(highest, playerScore.score),
     0,
   );
-  const leaders = playerScores.filter(
-    (playerScore) => playerScore.score === topScore,
-  );
-  const uniqueLeader = topScore > 0 && leaders.length === 1 ? leaders[0] : null;
 
   const clearScoreDraft = (sessionPlayerId: Id<"sessionPlayers">) => {
     setScoreDrafts((prev) => {
@@ -136,125 +132,88 @@ export default function ActiveSession({
   };
 
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle>Session {session.sessionNumber}</CardTitle>
-      </CardHeader>
-      <CardPanel className="space-y-3">
-        {playerScores.map((ps) => {
-          const isLeading = topScore > 0 && ps.score === topScore;
-          return (
-            <div
-              key={ps._id}
-              className="flex items-center gap-3 rounded-lg p-3"
-            >
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`font-medium truncate ${isLeading ? "text-primary" : ""}`}
-                  >
-                    {playerMap.get(ps.playerId) ?? "?"}
-                  </span>
-                  {isLeading && (
-                    <Badge variant="success" size="sm">
-                      Lead
-                    </Badge>
-                  )}
+    <Frame>
+      <FrameHeader>
+        <FrameTitle>Session {session.sessionNumber}</FrameTitle>
+        <FrameDescription>
+          Live scoring. Type a score and confirm with the checkmark.
+        </FrameDescription>
+      </FrameHeader>
+
+      <Card>
+        <CardPanel className="space-y-3">
+          {playerScores.map((ps) => {
+            const isLeading = topScore > 0 && ps.score === topScore;
+            return (
+              <div
+                key={ps._id}
+                className="flex items-center gap-3 rounded-lg p-3"
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`font-medium truncate ${isLeading ? "text-primary" : ""}`}
+                    >
+                      {playerMap.get(ps.playerId) ?? "?"}
+                    </span>
+                    {isLeading && (
+                      <Badge variant="success" size="sm">
+                        Lead
+                      </Badge>
+                    )}
+                  </div>
                 </div>
+
+                <Group
+                  className="w-36 shrink-0"
+                  aria-label={`${playerMap.get(ps.playerId) ?? "Player"} score input`}
+                >
+                  <Input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    value={scoreDrafts[ps._id] ?? String(ps.score)}
+                    onChange={(e) => {
+                      const nextValue = e.target.value;
+                      if (!/^\d*$/.test(nextValue)) return;
+                      setScoreDrafts((prev) => ({
+                        ...prev,
+                        [ps._id]: nextValue,
+                      }));
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key !== "Enter") return;
+                      e.preventDefault();
+                      void commitScore(ps);
+                    }}
+                    aria-label={`${playerMap.get(ps.playerId) ?? "Player"} score`}
+                    className={`text-center text-xl font-bold tabular-nums ${
+                      isLeading ? "text-primary" : "text-muted-foreground"
+                    }`}
+                  />
+                  <GroupSeparator />
+                  <Button
+                    variant="outline"
+                    size="icon-lg"
+                    aria-label={`Apply ${playerMap.get(ps.playerId) ?? "player"} score`}
+                    disabled={scoreDrafts[ps._id] === undefined}
+                    onClick={() => void commitScore(ps)}
+                  >
+                    <CheckIcon />
+                  </Button>
+                </Group>
               </div>
+            );
+          })}
+        </CardPanel>
+      </Card>
 
-              <input
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                value={scoreDrafts[ps._id] ?? String(ps.score)}
-                onChange={(e) => {
-                  const nextValue = e.target.value;
-                  if (!/^\d*$/.test(nextValue)) return;
-                  setScoreDrafts((prev) => ({
-                    ...prev,
-                    [ps._id]: nextValue,
-                  }));
-                }}
-                onKeyDown={(e) => {
-                  if (e.key !== "Enter") return;
-                  e.preventDefault();
-                  void commitScore(ps);
-                }}
-                aria-label={`${playerMap.get(ps.playerId) ?? "Player"} score`}
-                className={`w-20 rounded-md border border-input bg-background px-2 py-1 text-center text-xl leading-none font-bold tabular-nums outline-none ring-ring/24 transition-shadow focus:border-ring focus:ring-[3px] ${
-                  isLeading ? "text-primary" : "text-muted-foreground"
-                }`}
-              />
-
-              <Button
-                variant="secondary"
-                size="icon-lg"
-                className="shrink-0"
-                aria-label={`Apply ${playerMap.get(ps.playerId) ?? "player"} score`}
-                disabled={scoreDrafts[ps._id] === undefined}
-                onClick={() => void commitScore(ps)}
-              >
-                <CheckIcon />
-              </Button>
-
-              <div className="flex items-center gap-1">
-                <ScoreButton sessionPlayerId={ps._id} delta={1} size="lg" />
-                <ScoreButton sessionPlayerId={ps._id} delta={2} size="lg" />
-                <ScoreButton sessionPlayerId={ps._id} delta={3} size="lg" />
-                <ScoreButton
-                  sessionPlayerId={ps._id}
-                  delta={-1}
-                  variant="outline"
-                  size="lg"
-                />
-              </div>
-            </div>
-          );
-        })}
-      </CardPanel>
-      <Separator />
-      <CardFooter className="justify-center">
-        <Dialog>
-          <DialogTrigger render={<Button variant="destructive" size="sm" />}>
-            End Session
-          </DialogTrigger>
-          <DialogPopup>
-            <DialogHeader>
-              <DialogTitle>End Session?</DialogTitle>
-              <DialogDescription>
-                {uniqueLeader
-                  ? `${playerMap.get(uniqueLeader.playerId)} leads with ${topScore} points.`
-                  : topScore > 0
-                    ? `${leaders.length} players are tied at ${topScore} points.`
-                    : "No scores recorded yet."}
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <DialogClose render={<Button variant="outline" />}>
-                Cancel
-              </DialogClose>
-              <Button
-                variant="destructive"
-                onClick={async () => {
-                  try {
-                    await endSession({ sessionId: session._id });
-                    toast.success("Session ended");
-                  } catch (err) {
-                    toast.error(
-                      err instanceof Error
-                        ? err.message
-                        : "Failed to end session",
-                    );
-                  }
-                }}
-              >
-                End Session
-              </Button>
-            </DialogFooter>
-          </DialogPopup>
-        </Dialog>
-      </CardFooter>
-    </Card>
+      <FrameFooter>
+        <p className="text-xs text-muted-foreground">
+          Use the full-width action at the bottom of the page to end this
+          session.
+        </p>
+      </FrameFooter>
+    </Frame>
   );
 }

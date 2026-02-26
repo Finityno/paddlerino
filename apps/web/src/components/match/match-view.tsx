@@ -7,6 +7,7 @@ import { useQuery } from "convex/react";
 import { Spinner } from "@/components/ui/spinner";
 
 import ActiveSession from "./active-session";
+import EndSessionAction from "./end-session-action";
 import Leaderboard from "./leaderboard";
 import MatchHeader from "./match-header";
 import SessionList from "./session-list";
@@ -36,11 +37,7 @@ export default function MatchView({ matchId }: { matchId: Id<"matches"> }) {
   return (
     <div className="container mx-auto max-w-lg px-4 py-4 space-y-6">
       <MatchHeader match={match} />
-      <ActiveSession
-        matchId={matchId}
-        session={activeSession}
-        players={match.players}
-      />
+      <ActiveSession session={activeSession} players={match.players} />
       <Leaderboard leaderboard={leaderboard} />
       <SessionList
         sessions={sessions}
@@ -48,6 +45,7 @@ export default function MatchView({ matchId }: { matchId: Id<"matches"> }) {
         matchId={matchId}
         hasActiveSession={activeSession !== null && activeSession !== undefined}
       />
+      <EndSessionAction session={activeSession} players={match.players} />
     </div>
   );
 }
