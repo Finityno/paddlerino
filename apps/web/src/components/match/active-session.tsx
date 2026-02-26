@@ -3,6 +3,7 @@
 import { api } from "@paddlerino/backend/convex/_generated/api";
 import type { Id } from "@paddlerino/backend/convex/_generated/dataModel";
 import { useMutation } from "convex/react";
+import { CheckIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
@@ -85,8 +86,15 @@ export default function ActiveSession({
   }
 
   const playerMap = new Map(players.map((p) => [p._id, p.name]));
-  const sorted = [...session.playerScores].sort((a, b) => b.score - a.score);
-  const topScore = sorted[0]?.score ?? 0;
+  const playerScores = session.playerScores;
+  const topScore = playerScores.reduce(
+    (highest, playerScore) => Math.max(highest, playerScore.score),
+    0,
+  );
+  const leaders = playerScores.filter(
+    (playerScore) => playerScore.score === topScore,
+  );
+  const uniqueLeader = topScore > 0 && leaders.length === 1 ? leaders[0] : null;
 
   const clearScoreDraft = (sessionPlayerId: Id<"sessionPlayers">) => {
     setScoreDrafts((prev) => {
@@ -133,12 +141,12 @@ export default function ActiveSession({
         <CardTitle>Session {session.sessionNumber}</CardTitle>
       </CardHeader>
       <CardPanel className="space-y-3">
-        {sorted.map((ps) => {
+        {playerScores.map((ps) => {
           const isLeading = topScore > 0 && ps.score === topScore;
           return (
             <div
               key={ps._id}
-              className="flex items-center gap-3 rounded-lg border p-3"
+              className="flex items-center gap-3 rounded-lg p-3"
             >
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
@@ -168,17 +176,27 @@ export default function ActiveSession({
                     [ps._id]: nextValue,
                   }));
                 }}
-                onBlur={() => void commitScore(ps)}
                 onKeyDown={(e) => {
                   if (e.key !== "Enter") return;
                   e.preventDefault();
-                  e.currentTarget.blur();
+                  void commitScore(ps);
                 }}
                 aria-label={`${playerMap.get(ps.playerId) ?? "Player"} score`}
                 className={`w-20 rounded-md border border-input bg-background px-2 py-1 text-center text-xl leading-none font-bold tabular-nums outline-none ring-ring/24 transition-shadow focus:border-ring focus:ring-[3px] ${
                   isLeading ? "text-primary" : "text-muted-foreground"
                 }`}
               />
+
+              <Button
+                variant="secondary"
+                size="icon-lg"
+                className="shrink-0"
+                aria-label={`Apply ${playerMap.get(ps.playerId) ?? "player"} score`}
+                disabled={scoreDrafts[ps._id] === undefined}
+                onClick={() => void commitScore(ps)}
+              >
+                <CheckIcon />
+              </Button>
 
               <div className="flex items-center gap-1">
                 <ScoreButton sessionPlayerId={ps._id} delta={1} size="lg" />
@@ -188,7 +206,7 @@ export default function ActiveSession({
                   sessionPlayerId={ps._id}
                   delta={-1}
                   variant="outline"
-                  size="sm"
+                  size="lg"
                 />
               </div>
             </div>
@@ -205,9 +223,11 @@ export default function ActiveSession({
             <DialogHeader>
               <DialogTitle>End Session?</DialogTitle>
               <DialogDescription>
-                {topScore > 0 && sorted.length > 0
-                  ? `${playerMap.get(sorted[0].playerId)} leads with ${topScore} points.`
-                  : "No scores recorded yet."}
+                {uniqueLeader
+                  ? `${playerMap.get(uniqueLeader.playerId)} leads with ${topScore} points.`
+                  : topScore > 0
+                    ? `${leaders.length} players are tied at ${topScore} points.`
+                    : "No scores recorded yet."}
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>

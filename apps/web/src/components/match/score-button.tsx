@@ -19,7 +19,7 @@ export default function ScoreButton({
   sessionPlayerId,
   delta,
   variant = "default",
-  size = "default",
+  size = "lg",
 }: ScoreButtonProps) {
   const updateScore = useMutation(
     api.sessions.updateScore,
@@ -31,7 +31,7 @@ export default function ScoreButton({
     <Button
       variant={variant}
       size={size}
-      className="min-w-9 tabular-nums"
+      className="w-12 px-0 tabular-nums"
       onClick={() => updateScore({ sessionPlayerId, delta })}
     >
       {delta > 0 ? `+${delta}` : delta}
