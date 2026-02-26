@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import type { Id } from "./_generated/dataModel";
 import { query } from "./_generated/server";
 
 export const get = query({
@@ -9,48 +10,74 @@ export const get = query({
       .withIndex("by_matchId", (q) => q.eq("matchId", args.matchId))
       .collect();
 
-    const sessions = await ctx.db
+    const completedSessions = await ctx.db
       .query("sessions")
-      .withIndex("by_matchId", (q) => q.eq("matchId", args.matchId))
+      .withIndex("by_matchId_and_status", (q) =>
+        q.eq("matchId", args.matchId).eq("status", "completed"),
+      )
       .collect();
 
-    const completedSessions = sessions.filter((s) => s.status === "completed");
+    const sessionPlayers = await ctx.db
+      .query("sessionPlayers")
+      .withIndex("by_matchId_and_sessionId", (q) =>
+        q.eq("matchId", args.matchId),
+      )
+      .collect();
 
-    const winCounts: Record<string, number> = {};
-    const sessionsPlayed: Record<string, number> = {};
-    const totalPoints: Record<string, number> = {};
+    const playerScoresBySessionId = new Map<
+      Id<"sessions">,
+      Array<(typeof sessionPlayers)[number]>
+    >();
+    for (const sessionPlayer of sessionPlayers) {
+      const scores = playerScoresBySessionId.get(sessionPlayer.sessionId);
+      if (scores) {
+        scores.push(sessionPlayer);
+      } else {
+        playerScoresBySessionId.set(sessionPlayer.sessionId, [sessionPlayer]);
+      }
+    }
+
+    const winCounts = new Map<Id<"players">, number>();
+    const sessionsPlayed = new Map<Id<"players">, number>();
+    const totalPoints = new Map<Id<"players">, number>();
 
     for (const player of players) {
-      winCounts[player._id] = 0;
-      sessionsPlayed[player._id] = 0;
-      totalPoints[player._id] = 0;
+      winCounts.set(player._id, 0);
+      sessionsPlayed.set(player._id, 0);
+      totalPoints.set(player._id, 0);
     }
 
     for (const session of completedSessions) {
-      const playerScores = await ctx.db
-        .query("sessionPlayers")
-        .withIndex("by_sessionId", (q) => q.eq("sessionId", session._id))
-        .collect();
+      const playerScores = playerScoresBySessionId.get(session._id) ?? [];
+      let maxScore = -Infinity;
+      let maxScoreCount = 0;
+      let winningPlayerId: Id<"players"> | null = null;
 
-      // Find the highest score in this session
-      let maxScore = 0;
       for (const ps of playerScores) {
-        if (ps.score > maxScore) maxScore = ps.score;
+        const playedCount = sessionsPlayed.get(ps.playerId);
+        if (playedCount !== undefined) {
+          sessionsPlayed.set(ps.playerId, playedCount + 1);
+        }
+
+        const playerPoints = totalPoints.get(ps.playerId);
+        if (playerPoints !== undefined) {
+          totalPoints.set(ps.playerId, playerPoints + ps.score);
+        }
+
+        if (ps.score > maxScore) {
+          maxScore = ps.score;
+          maxScoreCount = 1;
+          winningPlayerId = ps.playerId;
+        } else if (ps.score === maxScore) {
+          maxScoreCount += 1;
+          winningPlayerId = null;
+        }
       }
 
-      for (const ps of playerScores) {
-        if (sessionsPlayed[ps.playerId] !== undefined) {
-          sessionsPlayed[ps.playerId]++;
-          totalPoints[ps.playerId] += ps.score;
-        }
-        // Winner is whoever has the highest score (ties = no winner)
-        if (
-          maxScore > 0 &&
-          ps.score === maxScore &&
-          playerScores.filter((p) => p.score === maxScore).length === 1 &&
-          winCounts[ps.playerId] !== undefined
-        ) {
-          winCounts[ps.playerId]++;
+      if (maxScore > 0 && maxScoreCount === 1 && winningPlayerId !== null) {
+        const wins = winCounts.get(winningPlayerId);
+        if (wins !== undefined) {
+          winCounts.set(winningPlayerId, wins + 1);
         }
       }
     }
@@ -59,9 +86,9 @@ export const get = query({
       .map((player) => ({
         _id: player._id,
         name: player.name,
-        wins: winCounts[player._id] ?? 0,
-        sessionsPlayed: sessionsPlayed[player._id] ?? 0,
-        totalPoints: totalPoints[player._id] ?? 0,
+        wins: winCounts.get(player._id) ?? 0,
+        sessionsPlayed: sessionsPlayed.get(player._id) ?? 0,
+        totalPoints: totalPoints.get(player._id) ?? 0,
       }))
       .sort(
         (a, b) =>

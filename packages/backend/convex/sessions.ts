@@ -10,17 +10,30 @@ export const list = query({
       .withIndex("by_matchId", (q) => q.eq("matchId", args.matchId))
       .collect();
 
-    const sessionsWithPlayers = await Promise.all(
-      sessions.map(async (session) => {
-        const playerScores = await ctx.db
-          .query("sessionPlayers")
-          .withIndex("by_sessionId", (q) => q.eq("sessionId", session._id))
-          .collect();
-        return { ...session, playerScores };
-      }),
-    );
+    const sessionPlayers = await ctx.db
+      .query("sessionPlayers")
+      .withIndex("by_matchId_and_sessionId", (q) =>
+        q.eq("matchId", args.matchId),
+      )
+      .collect();
 
-    return sessionsWithPlayers;
+    const playerScoresBySessionId = new Map<
+      (typeof sessions)[number]["_id"],
+      Array<(typeof sessionPlayers)[number]>
+    >();
+    for (const sessionPlayer of sessionPlayers) {
+      const scores = playerScoresBySessionId.get(sessionPlayer.sessionId);
+      if (scores) {
+        scores.push(sessionPlayer);
+      } else {
+        playerScoresBySessionId.set(sessionPlayer.sessionId, [sessionPlayer]);
+      }
+    }
+
+    return sessions.map((session) => ({
+      ...session,
+      playerScores: playerScoresBySessionId.get(session._id) ?? [],
+    }));
   },
 });
 
@@ -29,7 +42,7 @@ export const getActive = query({
   handler: async (ctx, args) => {
     const activeSession = await ctx.db
       .query("sessions")
-      .withIndex("by_matchId_status", (q) =>
+      .withIndex("by_matchId_and_status", (q) =>
         q.eq("matchId", args.matchId).eq("status", "in_progress"),
       )
       .first();
@@ -56,7 +69,7 @@ export const create = mutation({
 
     const existing = await ctx.db
       .query("sessions")
-      .withIndex("by_matchId_status", (q) =>
+      .withIndex("by_matchId_and_status", (q) =>
         q.eq("matchId", args.matchId).eq("status", "in_progress"),
       )
       .first();
@@ -64,19 +77,21 @@ export const create = mutation({
     if (existing)
       throw new Error("An active session already exists for this match");
 
-    const allSessions = await ctx.db
+    const latestSession = await ctx.db
       .query("sessions")
       .withIndex("by_matchId", (q) => q.eq("matchId", args.matchId))
-      .collect();
+      .order("desc")
+      .first();
 
     const sessionId = await ctx.db.insert("sessions", {
       matchId: args.matchId,
-      sessionNumber: allSessions.length + 1,
+      sessionNumber: latestSession ? latestSession.sessionNumber + 1 : 1,
       status: "in_progress",
     });
 
     for (const playerId of args.playerIds) {
       await ctx.db.insert("sessionPlayers", {
+        matchId: args.matchId,
         sessionId,
         playerId,
         score: 0,

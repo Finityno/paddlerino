@@ -20,13 +20,15 @@ export default defineSchema({
     status: v.union(v.literal("in_progress"), v.literal("completed")),
   })
     .index("by_matchId", ["matchId"])
-    .index("by_matchId_status", ["matchId", "status"]),
+    .index("by_matchId_and_status", ["matchId", "status"]),
 
   sessionPlayers: defineTable({
+    matchId: v.id("matches"),
     sessionId: v.id("sessions"),
     playerId: v.id("players"),
     score: v.number(),
   })
     .index("by_sessionId", ["sessionId"])
-    .index("by_playerId", ["playerId"]),
+    .index("by_playerId", ["playerId"])
+    .index("by_matchId_and_sessionId", ["matchId", "sessionId"]),
 });
