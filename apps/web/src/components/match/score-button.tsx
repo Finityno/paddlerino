@@ -6,6 +6,8 @@ import { useMutation } from "convex/react";
 
 import { Button } from "@/components/ui/button";
 
+import { optimisticallyApplyScoreDelta } from "./optimistic-score";
+
 interface ScoreButtonProps {
   sessionPlayerId: Id<"sessionPlayers">;
   delta: number;
@@ -19,7 +21,11 @@ export default function ScoreButton({
   variant = "default",
   size = "default",
 }: ScoreButtonProps) {
-  const updateScore = useMutation(api.sessions.updateScore);
+  const updateScore = useMutation(
+    api.sessions.updateScore,
+  ).withOptimisticUpdate((localStore, args) => {
+    optimisticallyApplyScoreDelta(localStore, args);
+  });
 
   return (
     <Button

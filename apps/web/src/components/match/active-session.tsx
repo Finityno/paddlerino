@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 
+import { optimisticallySetScore } from "./optimistic-score";
 import ScoreButton from "./score-button";
 
 interface Player {
@@ -58,7 +59,11 @@ export default function ActiveSession({
   players,
 }: ActiveSessionProps) {
   const endSession = useMutation(api.sessions.end);
-  const setScore = useMutation(api.sessions.setScore);
+  const setScore = useMutation(api.sessions.setScore).withOptimisticUpdate(
+    (localStore, args) => {
+      optimisticallySetScore(localStore, args);
+    },
+  );
   const [scoreDrafts, setScoreDrafts] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -107,13 +112,17 @@ export default function ActiveSession({
       return;
     }
 
+    clearScoreDraft(playerScore._id);
     try {
       await setScore({
         sessionPlayerId: playerScore._id,
         score: normalizedScore,
       });
-      clearScoreDraft(playerScore._id);
     } catch (err) {
+      setScoreDrafts((prev) => ({
+        ...prev,
+        [playerScore._id]: draft,
+      }));
       toast.error(err instanceof Error ? err.message : "Failed to update score");
     }
   };
