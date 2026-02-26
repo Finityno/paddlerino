@@ -111,6 +111,31 @@ export const updateScore = mutation({
   },
 });
 
+export const setScore = mutation({
+  args: {
+    sessionPlayerId: v.id("sessionPlayers"),
+    score: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const user = await authComponent.safeGetAuthUser(ctx);
+    if (!user) throw new Error("Not authenticated");
+
+    const sp = await ctx.db.get(args.sessionPlayerId);
+    if (!sp) throw new Error("Player score not found");
+
+    const session = await ctx.db.get(sp.sessionId);
+    if (!session) throw new Error("Session not found");
+    if (session.status !== "in_progress")
+      throw new Error("Session is not active");
+
+    if (!Number.isFinite(args.score)) throw new Error("Invalid score");
+    const newScore = Math.max(0, Math.trunc(args.score));
+
+    await ctx.db.patch(args.sessionPlayerId, { score: newScore });
+    return newScore;
+  },
+});
+
 export const end = mutation({
   args: { sessionId: v.id("sessions") },
   handler: async (ctx, args) => {

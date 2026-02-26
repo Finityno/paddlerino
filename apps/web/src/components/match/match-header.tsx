@@ -37,13 +37,22 @@ export default function MatchHeader({ match }: MatchHeaderProps) {
   const [playerName, setPlayerName] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
 
-  function handleShare() {
+  async function handleShare() {
     const url = window.location.href;
     if (navigator.share) {
-      navigator.share({ title: match.name, url });
-    } else {
-      navigator.clipboard.writeText(url);
+      try {
+        await navigator.share({ title: match.name, url });
+        return;
+      } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") return;
+      }
+    }
+
+    try {
+      await navigator.clipboard.writeText(url);
       toast.success("Link copied to clipboard");
+    } catch {
+      toast.error("Failed to copy link");
     }
   }
 

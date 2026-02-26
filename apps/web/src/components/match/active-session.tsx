@@ -3,6 +3,7 @@
 import { api } from "@paddlerino/backend/convex/_generated/api";
 import type { Id } from "@paddlerino/backend/convex/_generated/dataModel";
 import { useMutation } from "convex/react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -57,6 +58,12 @@ export default function ActiveSession({
   players,
 }: ActiveSessionProps) {
   const endSession = useMutation(api.sessions.end);
+  const setScore = useMutation(api.sessions.setScore);
+  const [scoreDrafts, setScoreDrafts] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    setScoreDrafts({});
+  }, [session?._id]);
 
   if (session === undefined) return null;
 
@@ -75,6 +82,41 @@ export default function ActiveSession({
   const playerMap = new Map(players.map((p) => [p._id, p.name]));
   const sorted = [...session.playerScores].sort((a, b) => b.score - a.score);
   const topScore = sorted[0]?.score ?? 0;
+
+  const clearScoreDraft = (sessionPlayerId: Id<"sessionPlayers">) => {
+    setScoreDrafts((prev) => {
+      const next = { ...prev };
+      delete next[sessionPlayerId];
+      return next;
+    });
+  };
+
+  const commitScore = async (playerScore: PlayerScore) => {
+    const draft = scoreDrafts[playerScore._id];
+    if (draft === undefined) return;
+
+    const parsedScore = Number.parseInt(draft, 10);
+    if (!Number.isFinite(parsedScore)) {
+      clearScoreDraft(playerScore._id);
+      return;
+    }
+
+    const normalizedScore = Math.max(0, parsedScore);
+    if (normalizedScore === playerScore.score) {
+      clearScoreDraft(playerScore._id);
+      return;
+    }
+
+    try {
+      await setScore({
+        sessionPlayerId: playerScore._id,
+        score: normalizedScore,
+      });
+      clearScoreDraft(playerScore._id);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update score");
+    }
+  };
 
   return (
     <Card>
@@ -104,13 +146,30 @@ export default function ActiveSession({
                 </div>
               </div>
 
-              <span
-                className={`text-3xl font-bold tabular-nums min-w-[2ch] text-right ${
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={scoreDrafts[ps._id] ?? String(ps.score)}
+                onChange={(e) => {
+                  const nextValue = e.target.value;
+                  if (!/^\d*$/.test(nextValue)) return;
+                  setScoreDrafts((prev) => ({
+                    ...prev,
+                    [ps._id]: nextValue,
+                  }));
+                }}
+                onBlur={() => void commitScore(ps)}
+                onKeyDown={(e) => {
+                  if (e.key !== "Enter") return;
+                  e.preventDefault();
+                  e.currentTarget.blur();
+                }}
+                aria-label={`${playerMap.get(ps.playerId) ?? "Player"} score`}
+                className={`w-20 rounded-md border border-input bg-background px-2 py-1 text-center text-xl leading-none font-bold tabular-nums outline-none ring-ring/24 transition-shadow focus:border-ring focus:ring-[3px] ${
                   isLeading ? "text-primary" : "text-muted-foreground"
                 }`}
-              >
-                {ps.score}
-              </span>
+              />
 
               <div className="flex items-center gap-1">
                 <ScoreButton sessionPlayerId={ps._id} delta={1} size="lg" />
