@@ -1,6 +1,5 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { authComponent } from "./auth";
 
 export const list = query({
   args: { matchId: v.id("matches") },
@@ -64,8 +63,9 @@ export const create = mutation({
     playerIds: v.array(v.id("players")),
   },
   handler: async (ctx, args) => {
-    const user = await authComponent.safeGetAuthUser(ctx);
-    if (!user) throw new Error("Not authenticated");
+    const match = await ctx.db.get(args.matchId);
+    if (!match) throw new Error("Match not found");
+    if (match.status !== "active") throw new Error("Match is not active");
 
     const existing = await ctx.db
       .query("sessions")
@@ -108,9 +108,6 @@ export const updateScore = mutation({
     delta: v.number(),
   },
   handler: async (ctx, args) => {
-    const user = await authComponent.safeGetAuthUser(ctx);
-    if (!user) throw new Error("Not authenticated");
-
     const sp = await ctx.db.get(args.sessionPlayerId);
     if (!sp) throw new Error("Player score not found");
 
@@ -132,9 +129,6 @@ export const setScore = mutation({
     score: v.number(),
   },
   handler: async (ctx, args) => {
-    const user = await authComponent.safeGetAuthUser(ctx);
-    if (!user) throw new Error("Not authenticated");
-
     const sp = await ctx.db.get(args.sessionPlayerId);
     if (!sp) throw new Error("Player score not found");
 
@@ -154,9 +148,6 @@ export const setScore = mutation({
 export const end = mutation({
   args: { sessionId: v.id("sessions") },
   handler: async (ctx, args) => {
-    const user = await authComponent.safeGetAuthUser(ctx);
-    if (!user) throw new Error("Not authenticated");
-
     const session = await ctx.db.get(args.sessionId);
     if (!session) throw new Error("Session not found");
     if (session.status !== "in_progress")

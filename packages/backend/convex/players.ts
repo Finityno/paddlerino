@@ -1,6 +1,5 @@
 import { v } from "convex/values";
 import { mutation } from "./_generated/server";
-import { authComponent } from "./auth";
 
 export const add = mutation({
   args: {
@@ -8,9 +7,6 @@ export const add = mutation({
     name: v.string(),
   },
   handler: async (ctx, args) => {
-    const user = await authComponent.safeGetAuthUser(ctx);
-    if (!user) throw new Error("Not authenticated");
-
     const match = await ctx.db.get(args.matchId);
     if (!match) throw new Error("Match not found");
 
@@ -24,8 +20,8 @@ export const add = mutation({
 export const remove = mutation({
   args: { playerId: v.id("players") },
   handler: async (ctx, args) => {
-    const user = await authComponent.safeGetAuthUser(ctx);
-    if (!user) throw new Error("Not authenticated");
+    const player = await ctx.db.get(args.playerId);
+    if (!player) throw new Error("Player not found");
 
     const assignments = await ctx.db
       .query("sessionPlayers")
