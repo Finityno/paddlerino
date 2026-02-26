@@ -1,0 +1,3 @@
+{
+  "extends": "@paddlerino/config/tsconfig.base.json"
+}
