@@ -1,0 +1,172 @@
+"use client";
+
+import { api } from "@paddlerino/backend/convex/_generated/api";
+import type { Id } from "@paddlerino/backend/convex/_generated/dataModel";
+import { useMutation } from "convex/react";
+import { toast } from "sonner";
+
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardFooter,
+  CardHeader,
+  CardPanel,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Dialog,
+  DialogClose,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogPopup,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Separator } from "@/components/ui/separator";
+
+import ScoreButton from "./score-button";
+
+interface Player {
+  _id: Id<"players">;
+  name: string;
+}
+
+interface PlayerScore {
+  _id: Id<"sessionPlayers">;
+  playerId: Id<"players">;
+  score: number;
+}
+
+interface ActiveSessionData {
+  _id: Id<"sessions">;
+  sessionNumber: number;
+  status: "in_progress" | "completed";
+  playerScores: PlayerScore[];
+}
+
+interface ActiveSessionProps {
+  matchId: Id<"matches">;
+  session: ActiveSessionData | null | undefined;
+  players: Player[];
+}
+
+export default function ActiveSession({
+  session,
+  players,
+}: ActiveSessionProps) {
+  const endSession = useMutation(api.sessions.end);
+
+  if (session === undefined) return null;
+
+  if (session === null) {
+    return (
+      <Card>
+        <CardPanel>
+          <p className="text-center text-sm text-muted-foreground py-4">
+            No active session. Start a new one below.
+          </p>
+        </CardPanel>
+      </Card>
+    );
+  }
+
+  const playerMap = new Map(players.map((p) => [p._id, p.name]));
+  const sorted = [...session.playerScores].sort((a, b) => b.score - a.score);
+  const topScore = sorted[0]?.score ?? 0;
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle>Session {session.sessionNumber}</CardTitle>
+      </CardHeader>
+      <CardPanel className="space-y-3">
+        {sorted.map((ps) => {
+          const isLeading = topScore > 0 && ps.score === topScore;
+          return (
+            <div
+              key={ps._id}
+              className="flex items-center gap-3 rounded-lg border p-3"
+            >
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`font-medium truncate ${isLeading ? "text-primary" : ""}`}
+                  >
+                    {playerMap.get(ps.playerId) ?? "?"}
+                  </span>
+                  {isLeading && (
+                    <Badge variant="success" size="sm">
+                      Lead
+                    </Badge>
+                  )}
+                </div>
+              </div>
+
+              <span
+                className={`text-3xl font-bold tabular-nums min-w-[2ch] text-right ${
+                  isLeading ? "text-primary" : "text-muted-foreground"
+                }`}
+              >
+                {ps.score}
+              </span>
+
+              <div className="flex items-center gap-1">
+                <ScoreButton sessionPlayerId={ps._id} delta={1} size="lg" />
+                <ScoreButton sessionPlayerId={ps._id} delta={2} size="lg" />
+                <ScoreButton sessionPlayerId={ps._id} delta={3} size="lg" />
+                <ScoreButton
+                  sessionPlayerId={ps._id}
+                  delta={-1}
+                  variant="outline"
+                  size="sm"
+                />
+              </div>
+            </div>
+          );
+        })}
+      </CardPanel>
+      <Separator />
+      <CardFooter className="justify-center">
+        <Dialog>
+          <DialogTrigger render={<Button variant="destructive" size="sm" />}>
+            End Session
+          </DialogTrigger>
+          <DialogPopup>
+            <DialogHeader>
+              <DialogTitle>End Session?</DialogTitle>
+              <DialogDescription>
+                {topScore > 0 && sorted.length > 0
+                  ? `${playerMap.get(sorted[0].playerId)} leads with ${topScore} points.`
+                  : "No scores recorded yet."}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <DialogClose render={<Button variant="outline" />}>
+                Cancel
+              </DialogClose>
+              <Button
+                variant="destructive"
+                onClick={async () => {
+                  try {
+                    await endSession({ sessionId: session._id });
+                    toast.success("Session ended");
+                  } catch (err) {
+                    toast.error(
+                      err instanceof Error
+                        ? err.message
+                        : "Failed to end session",
+                    );
+                  }
+                }}
+              >
+                End Session
+              </Button>
+            </DialogFooter>
+          </DialogPopup>
+        </Dialog>
+      </CardFooter>
+    </Card>
+  );
+}
